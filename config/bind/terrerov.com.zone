@@ -1,0 +1,20 @@
+$TTL 86400
+@       IN      SOA     ns.terrerov.com. admin.terrerov.com. (
+                        2024011501  ; Serial
+                        3600        ; Refresh
+                        1800        ; Retry
+                        604800      ; Expire
+                        86400 )     ; Minimum TTL
+
+@       IN      NS      ns.terrerov.com.
+
+; Service DNS records
+ns              IN      A       172.20.0.4
+traefik         IN      A       172.20.0.2
+webserver       IN      A       172.20.0.3
+database        IN      A       172.20.0.5
+squid           IN      A       172.20.0.6
+twingate        IN      A       172.20.0.7
+
+; Wildcard record for subdomains
+*               IN      A       172.20.0.2

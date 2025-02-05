@@ -1,0 +1,50 @@
+[entryPoints]
+  [entryPoints.web]
+    address = ":80"
+    [entryPoints.web.http.redirections.entryPoint]
+      to = "websecure"
+      scheme = "https"
+
+  [entryPoints.websecure]
+    address = ":443"
+
+[api]
+  dashboard = true
+  insecure = false
+
+[providers.docker]
+  endpoint = "unix:///var/run/docker.sock"
+  exposedByDefault = false
+  network = "homelab_net"
+
+[entryPoints.websecure.http.middlewares]
+  middlewares = ["auth"]
+
+[http.middlewares.auth.basicAuth]
+  usersFile = "/etc/traefik/users.txt"
+
+[http.middlewares.default-security.headers]
+  frameDeny = true
+  browserXssFilter = true
+  contentTypeNosniff = true
+  forceSTSHeader = true
+  stsIncludeSubdomains = true
+  stsPreload = true
+  stsSeconds = 31536000
+  customFrameOptionsValue = "SAMEORIGIN"
+
+[certificatesResolvers.cloudflare.acme]
+  email = "terrerov@gmail.com"
+  storage = "acme.json"
+  [certificatesResolvers.cloudflare.acme.dnsChallenge]
+    provider = "cloudflare"
+    resolvers = ["1.1.1.1:53", "1.0.0.1:53"]
+
+[log]
+  level = "INFO"
+
+[accessLog]
+
+[providers.file]
+  directory = "/etc/traefik/dynamic"
+  watch = true

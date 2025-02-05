@@ -1,0 +1,5 @@
+zone "terrerov.com" {
+    type master;
+    file "/data/terrerov.com.zone";
+    allow-query { any; };
+};

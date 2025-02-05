@@ -1,0 +1,168 @@
+version: '3.8'
+
+networks:
+  homelab_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24
+          gateway: 172.20.0.1
+
+secrets:
+  db_root_password:
+    file: ./secrets/db_root_password.txt
+  twingate_token:
+    file: ./secrets/twingate_token.txt
+  cf_api_token:
+    file: ./secrets/cf_api_token.txt
+  github_token:
+    file: ./secrets/github_token.txt
+  dockerhub_token:
+    file: ./secrets/dockerhub_token.txt
+  gemini_api_key:
+    file: ./secrets/gemini_api_key.txt
+
+services:
+  traefik:
+    image: traefik:v2.10
+    container_name: traefik
+    restart: unless-stopped
+    networks:
+      homelab_net:
+        ipv4_address: 172.20.0.2
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - CF_API_TOKEN_FILE=/run/secrets/cf_api_token
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/traefik.toml:/etc/traefik/traefik.toml:ro
+      - ./traefik/acme.json:/acme.json
+      - ./traefik/users.txt:/etc/traefik/users.txt:ro
+    secrets:
+      - cf_api_token
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 256M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  webserver:
+    image: nginx:alpine
+    container_name: webserver
+    restart: unless-stopped
+    networks:
+      homelab_net:
+        ipv4_address: 172.20.0.3
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/html:/usr/share/nginx/html:ro
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.webserver.rule=Host(`webserver.terrerov.com`)"
+      - "traefik.http.routers.webserver.tls=true"
+      - "traefik.http.routers.webserver.tls.certresolver=cloudflare"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.30'
+          memory: 128M
+        reservations:
+          cpus: '0.10'
+          memory: 64M
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  dns-server:
+    image: sameersbn/bind:latest
+    container_name: dns-server
+    restart: unless-stopped
+    networks:
+      homelab_net:
+        ipv4_address: 172.20.0.4
+    ports:
+      - "53:53/tcp"
+      - "53:53/udp"
+    volumes:
+      - ./bind:/data
+    deploy:
+      resources:
+        limits:
+          cpus: '0.30'
+          memory: 256M
+        reservations:
+          cpus: '0.10'
+          memory: 128M
+    healthcheck:
+      test: ["CMD-SHELL", "dig @localhost example.com || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  database:
+    image: mariadb:10.5
+    container_name: database
+    restart: unless-stopped
+    networks:
+      homelab_net:
+        ipv4_address: 172.20.0.5
+    environment:
+      - MYSQL_ROOT_PASSWORD_FILE=/run/secrets/db_root_password
+      - MYSQL_DATABASE=homelab
+    volumes:
+      - ./mariadb/data:/var/lib/mysql
+      - ./mariadb/conf.d:/etc/mysql/conf.d:ro
+    secrets:
+      - db_root_password
+    deploy:
+      resources:
+        limits:
+          cpus: '1.00'
+          memory: 1G
+        reservations:
+          cpus: '0.50'
+          memory: 512M
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  squid:
+    image: ubuntu/squid:latest
+    container_name: squid
+    restart: unless-stopped
+    networks:
+      homelab_net:
+        ipv4_address: 172.20.0.6
+    volumes:
+      - ./squid/squid.conf:/etc/squid/squid.conf:ro
+
+  twingate:
+    image: twingate/connector:1
+    container_name: twingate
+    restart: unless-stopped
+    networks:
+      homelab_net:
+        ipv4_address: 172.20.0.7
+    environment:
+      - TENANT_URL=terrerov.twingate.com
+      - ACCESS_TOKEN=/run/secrets/twingate_token
+    secrets:
+      - twingate_token
